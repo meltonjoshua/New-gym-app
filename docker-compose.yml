@@ -1,0 +1,139 @@
+version: '3.8'
+services:
+  api-gateway:
+    build: ./backend/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - database
+      - redis
+    networks:
+      - fitai-network
+
+  user-service:
+    build: ./backend/user-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+      - JWT_SECRET=your-jwt-secret-key
+    depends_on:
+      - database
+    networks:
+      - fitai-network
+
+  workout-service:
+    build: ./backend/workout-service
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+      - MONGODB_URL=mongodb://mongo:27017/fitai
+    depends_on:
+      - database
+      - mongo
+    networks:
+      - fitai-network
+
+  ai-service:
+    build: ./backend/ai-service
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./ml-models:/app/models
+    environment:
+      - FLASK_ENV=production
+      - MODEL_PATH=/app/models
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+    depends_on:
+      - database
+    networks:
+      - fitai-network
+
+  analytics-service:
+    build: ./backend/analytics-service
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - database
+      - redis
+    networks:
+      - fitai-network
+
+  notification-service:
+    build: ./backend/notification-service
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fitai:password@database:5432/fitai
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - database
+      - redis
+    networks:
+      - fitai-network
+
+  database:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=fitai
+      - POSTGRES_USER=fitai
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - fitai-network
+
+  mongo:
+    image: mongo:5.0
+    environment:
+      - MONGO_INITDB_DATABASE=fitai
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - fitai-network
+
+  redis:
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fitai-network
+
+  web-frontend:
+    build: ./frontend/web
+    ports:
+      - "3001:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3000
+    depends_on:
+      - api-gateway
+    networks:
+      - fitai-network
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+
+networks:
+  fitai-network:
+    driver: bridge
