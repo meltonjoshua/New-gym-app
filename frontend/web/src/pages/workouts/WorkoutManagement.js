@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -41,8 +41,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  FormControlLabel,
-  Switch,
   Slider,
   Divider,
 } from '@mui/material';
@@ -56,11 +54,6 @@ import {
   PlayArrow,
   Stop,
   ContentCopy,
-  Visibility,
-  FitnessCenter,
-  Timer,
-  TrendingUp,
-  Person,
   ExpandMore,
   Download,
   Upload,

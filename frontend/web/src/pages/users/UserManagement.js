@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -28,8 +28,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Switch,
-  FormControlLabel,
   Grid,
   Card,
   CardContent,
@@ -50,7 +48,6 @@ import {
   Phone,
   LocationOn,
   FitnessCenter,
-  TrendingUp,
   Download,
   Upload,
 } from '@mui/icons-material';
@@ -487,7 +484,7 @@ function UserDetailsDialog({ user, open, onClose }) {
 }
 
 export default function UserManagement() {
-  const [users, setUsers] = useState(mockUsers);
+  const [users] = useState(mockUsers); // setUsers will be used for CRUD operations
   const [order, setOrder] = useState('asc');
   const [orderBy, setOrderBy] = useState('name');
   const [selected, setSelected] = useState([]);

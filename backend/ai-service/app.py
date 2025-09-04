@@ -1,74 +1,77 @@
 import os
-import cv2
-import numpy as np
-import mediapipe as mp
-import tensorflow as tf
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import redis
+import cv2  # type: ignore
+import numpy as np  # type: ignore
+import mediapipe as mp  # type: ignore
+import tensorflow as tf  # type: ignore
+from flask import Flask, request, jsonify  # type: ignore
+from flask_cors import CORS  # type: ignore
+import psycopg2  # type: ignore
+from psycopg2.extras import RealDictCursor  # type: ignore
+import redis  # type: ignore
 import json
 import logging
-from datetime import datetime
-import pickle
-from typing import Dict, List, Tuple, Optional
+import base64
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)
+app: Any = Flask(__name__)  # type: ignore
+CORS(app)  # type: ignore
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Redis connection
-redis_client = redis.Redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
+redis_client: Any = redis.Redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))  # type: ignore
 
 # Database connection
-def get_db_connection():
-    return psycopg2.connect(
+def get_db_connection() -> Any:
+    return psycopg2.connect(  # type: ignore
         os.getenv('DATABASE_URL'),
         cursor_factory=RealDictCursor
     )
 
 @dataclass
-class PoseAnalysisResult:
+class FormAnalysisResult:
     form_score: float
     feedback: List[str]
     corrections: List[str]
     rep_count: int
     confidence: float
-    landmarks: List[Dict]
+    landmarks: List[Dict[str, Any]]
 
 @dataclass
 class WorkoutRecommendation:
-    exercises: List[Dict]
+    exercises: List[Dict[str, Any]]
     estimated_duration: int
+    difficulty_level: int
+    adaptations: List[str]
+    reasoning: str
     difficulty_level: int
     adaptations: List[str]
     reasoning: str
 
 class PoseAnalyzer:
-    def __init__(self):
-        self.mediapipe_model = mp.solutions.pose
-        self.pose = self.mediapipe_model.Pose(
+    def __init__(self) -> None:
+        self.mediapipe_model: Any = mp.solutions.pose  # type: ignore
+        self.pose: Any = self.mediapipe_model.Pose(  # type: ignore
             static_image_mode=False,
             model_complexity=1,
             enable_segmentation=False,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
-        self.drawing = mp.solutions.drawing_utils
+        self.drawing: Any = mp.solutions.drawing_utils  # type: ignore
         
         # Load custom form classifier models
-        self.form_models = self._load_form_models()
+        self.form_models: Dict[str, Any] = self._load_form_models()
         
         # Exercise-specific analysis parameters
-        self.exercise_configs = {
+        # Exercise configuration
+        self.exercise_configs: Dict[str, Dict[str, Any]] = {
             'push-ups': {
                 'key_points': ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
                 'angles': ['elbow_angle', 'body_alignment'],
@@ -91,9 +94,9 @@ class PoseAnalyzer:
             }
         }
         
-    def _load_form_models(self):
-        """Load pre-trained form analysis models"""
-        models = {}
+    def _load_form_models(self) -> Dict[str, Any]:
+        """Load TensorFlow models for form analysis"""
+        models: Dict[str, Any] = {}
         model_path = os.getenv('MODEL_PATH', '/app/models')
         
         try:
@@ -101,7 +104,7 @@ class PoseAnalyzer:
             for exercise in ['push-ups', 'squats', 'deadlifts', 'burpees']:
                 model_file = f'{model_path}/{exercise}_form_classifier.h5'
                 if os.path.exists(model_file):
-                    models[exercise] = tf.keras.models.load_model(model_file)
+                    models[exercise] = tf.keras.models.load_model(model_file)  # type: ignore
                 else:
                     logger.warning(f"Model not found for {exercise}: {model_file}")
                     models[exercise] = None
@@ -110,24 +113,23 @@ class PoseAnalyzer:
             
         return models
     
-    def extract_pose_landmarks(self, video_frame):
-        """Extract pose landmarks from video frame"""
+    def extract_pose_landmarks(self, frame: Any) -> List[Dict[str, float]]:
+        """Extract pose landmarks from frame"""
         try:
             # Convert BGR to RGB
-            rgb_frame = cv2.cvtColor(video_frame, cv2.COLOR_BGR2RGB)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # type: ignore
             
-            # Process with MediaPipe
-            results = self.pose.process(rgb_frame)
+            # Process frame
+            results = self.pose.process(rgb_frame)  # type: ignore
             
-            if results.pose_landmarks:
-                # Convert to normalized coordinates
-                landmarks = []
-                for landmark in results.pose_landmarks.landmark:
+            if results.pose_landmarks:  # type: ignore
+                landmarks: List[Dict[str, float]] = []
+                for landmark in results.pose_landmarks.landmark:  # type: ignore
                     landmarks.append({
-                        'x': landmark.x,
-                        'y': landmark.y,
-                        'z': landmark.z,
-                        'visibility': landmark.visibility
+                        'x': landmark.x,  # type: ignore
+                        'y': landmark.y,  # type: ignore
+                        'z': landmark.z,  # type: ignore
+                        'visibility': landmark.visibility  # type: ignore
                     })
                 return landmarks
             
@@ -136,34 +138,35 @@ class PoseAnalyzer:
             logger.error(f"Error extracting landmarks: {e}")
             return []
     
-    def calculate_angle(self, point1, point2, point3):
+    def calculate_angle(self, point1: Dict[str, float], point2: Dict[str, float], point3: Dict[str, float]) -> float:
         """Calculate angle between three points"""
         try:
-            # Vector calculations
-            a = np.array([point1['x'], point1['y']])
-            b = np.array([point2['x'], point2['y']])
-            c = np.array([point3['x'], point3['y']])
+            # Create vectors
+            a = np.array([point1['x'], point1['y']])  # type: ignore
+            b = np.array([point2['x'], point2['y']])  # type: ignore
+            c = np.array([point3['x'], point3['y']])  # type: ignore
             
-            ba = a - b
-            bc = c - b
+            # Calculate vectors
+            ba = a - b  # type: ignore
+            bc = c - b  # type: ignore
             
-            cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-            cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
-            angle = np.arccos(cosine_angle)
+            # Calculate angle
+            cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))  # type: ignore
+            angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))  # type: ignore
             
-            return np.degrees(angle)
+            return np.degrees(angle)  # type: ignore
         except Exception as e:
             logger.error(f"Error calculating angle: {e}")
-            return 0
+            return 0.0
     
-    def analyze_exercise_form(self, video_frame, exercise_type: str, user_id: str = None) -> PoseAnalysisResult:
+    def analyze_exercise_form(self, video_frame: Any, exercise_type: str, user_id: Optional[str] = None) -> FormAnalysisResult:
         """Main form analysis function"""
         try:
             # Extract landmarks
             landmarks = self.extract_pose_landmarks(video_frame)
             
             if not landmarks:
-                return PoseAnalysisResult(
+                return FormAnalysisResult(
                     form_score=0.0,
                     feedback=["Unable to detect pose. Please ensure you're clearly visible in the camera."],
                     corrections=[],
@@ -180,7 +183,7 @@ class PoseAnalyzer:
                 rep_count = self._count_reps(landmarks, exercise_type.lower(), user_id)
                 confidence = self._calculate_confidence(landmarks)
                 
-                return PoseAnalysisResult(
+                return FormAnalysisResult(
                     form_score=form_score,
                     feedback=feedback,
                     corrections=corrections,
@@ -189,7 +192,7 @@ class PoseAnalyzer:
                     landmarks=landmarks
                 )
             else:
-                return PoseAnalysisResult(
+                return FormAnalysisResult(
                     form_score=0.5,
                     feedback=[f"Exercise type '{exercise_type}' not yet supported for detailed analysis."],
                     corrections=[],
@@ -200,7 +203,7 @@ class PoseAnalyzer:
                 
         except Exception as e:
             logger.error(f"Error in form analysis: {e}")
-            return PoseAnalysisResult(
+            return FormAnalysisResult(
                 form_score=0.0,
                 feedback=["Analysis error occurred. Please try again."],
                 corrections=[],
@@ -209,11 +212,9 @@ class PoseAnalyzer:
                 landmarks=[]
             )
     
-    def _analyze_form_quality(self, landmarks, exercise_type):
+    def _analyze_form_quality(self, landmarks: List[Dict[str, float]], exercise_type: str) -> float:
         """Analyze form quality for specific exercise"""
         try:
-            config = self.exercise_configs[exercise_type]
-            
             if exercise_type == 'push-ups':
                 return self._analyze_pushup_form(landmarks)
             elif exercise_type == 'squats':
@@ -228,7 +229,7 @@ class PoseAnalyzer:
             logger.error(f"Error analyzing form quality: {e}")
             return 0.0
     
-    def _analyze_pushup_form(self, landmarks):
+    def _analyze_pushup_form(self, landmarks: List[Dict[str, float]]) -> float:
         """Specific analysis for push-ups"""
         try:
             # Key landmarks for push-ups
@@ -262,7 +263,7 @@ class PoseAnalyzer:
             logger.error(f"Error in push-up analysis: {e}")
             return 0.5
     
-    def _analyze_squat_form(self, landmarks):
+    def _analyze_squat_form(self, landmarks: List[Dict[str, float]]) -> float:
         """Specific analysis for squats"""
         try:
             # Key landmarks for squats
@@ -293,7 +294,7 @@ class PoseAnalyzer:
             logger.error(f"Error in squat analysis: {e}")
             return 0.5
     
-    def _analyze_deadlift_form(self, landmarks):
+    def _analyze_deadlift_form(self, landmarks: List[Dict[str, float]]) -> float:
         """Specific analysis for deadlifts"""
         try:
             # Key landmarks for deadlifts
@@ -322,7 +323,7 @@ class PoseAnalyzer:
             logger.error(f"Error in deadlift analysis: {e}")
             return 0.5
     
-    def _analyze_burpee_form(self, landmarks):
+    def _analyze_burpee_form(self, landmarks: List[Dict[str, float]]) -> float:
         """Specific analysis for burpees"""
         try:
             # Burpees have multiple phases, this is a simplified analysis
@@ -347,9 +348,9 @@ class PoseAnalyzer:
             logger.error(f"Error in burpee analysis: {e}")
             return 0.5
     
-    def _generate_feedback(self, landmarks, exercise_type, form_score):
+    def _generate_feedback(self, landmarks: List[Dict[str, float]], exercise_type: str, form_score: float) -> List[str]:
         """Generate real-time feedback based on form analysis"""
-        feedback = []
+        feedback: List[str] = []
         
         try:
             if form_score >= 0.9:
@@ -381,9 +382,9 @@ class PoseAnalyzer:
         
         return feedback
     
-    def _suggest_corrections(self, landmarks, exercise_type):
+    def _suggest_corrections(self, landmarks: List[Dict[str, float]], exercise_type: str) -> List[str]:
         """Suggest specific corrections for form improvement"""
-        corrections = []
+        corrections: List[str] = []
         
         try:
             # General corrections based on landmarks visibility and position
@@ -407,7 +408,7 @@ class PoseAnalyzer:
         
         return corrections
     
-    def _count_reps(self, landmarks, exercise_type, user_id=None):
+    def _count_reps(self, landmarks: List[Dict[str, float]], exercise_type: str, user_id: Optional[str] = None) -> int:
         """Count repetitions based on movement patterns"""
         try:
             # This would implement actual rep counting logic
@@ -429,7 +430,7 @@ class PoseAnalyzer:
             logger.error(f"Error counting reps: {e}")
             return 0
     
-    def _calculate_confidence(self, landmarks):
+    def _calculate_confidence(self, landmarks: List[Dict[str, float]]) -> float:
         """Calculate confidence score based on landmark visibility"""
         try:
             if not landmarks:
@@ -446,7 +447,7 @@ class WorkoutGenerator:
     def __init__(self):
         self.exercise_db = self._load_exercise_database()
         
-    def _load_exercise_database(self):
+    def _load_exercise_database(self) -> List[Dict[str, Any]]:
         """Load exercise database from PostgreSQL"""
         try:
             with get_db_connection() as conn:
@@ -467,7 +468,7 @@ class WorkoutGenerator:
         try:
             # Get user data and progress
             user_data = self._get_user_data(user_id)
-            progress = self._get_progress_metrics(user_id)
+            progress = self.get_progress_metrics(user_id)  # type: ignore
             
             # AI-driven exercise selection
             exercises = self._select_exercises(user_data, progress, session_type)
@@ -493,7 +494,7 @@ class WorkoutGenerator:
             logger.error(f"Error generating workout: {e}")
             return self._get_fallback_workout()
     
-    def _get_user_data(self, user_id):
+    def _get_user_data(self, user_id: str) -> Dict[str, Any]:
         """Fetch user profile and preferences"""
         try:
             with get_db_connection() as conn:
@@ -514,7 +515,7 @@ class WorkoutGenerator:
             logger.error(f"Error fetching user data: {e}")
             return {}
     
-    def _get_progress_metrics(self, user_id):
+    def get_progress_metrics(self, user_id: str) -> List[Dict[str, Any]]:
         """Get user's recent progress data"""
         try:
             with get_db_connection() as conn:
@@ -533,7 +534,7 @@ class WorkoutGenerator:
             logger.error(f"Error fetching progress metrics: {e}")
             return []
     
-    def _select_exercises(self, user_data, progress, session_type):
+    def _select_exercises(self, user_data: Dict[str, Any], progress: List[Dict[str, Any]], session_type: str) -> List[Dict[str, Any]]:
         """AI-driven exercise selection based on user profile and progress"""
         try:
             # Filter exercises based on user preferences and equipment
@@ -555,12 +556,11 @@ class WorkoutGenerator:
             elif session_type == 'strength':
                 available_exercises = [ex for ex in available_exercises if ex['category'] == 'Strength']
             
-            # Select exercises based on goals and muscle groups
-            goals = user_data.get('goals', [])
-            selected_exercises = []
+            # Select exercises based on muscle groups
+            selected_exercises: List[Dict[str, Any]] = []
             
             # Ensure muscle group balance
-            muscle_groups_covered = set()
+            muscle_groups_covered: set[str] = set()
             target_muscle_groups = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core']
             
             for target_group in target_muscle_groups:
@@ -595,14 +595,14 @@ class WorkoutGenerator:
             logger.error(f"Error selecting exercises: {e}")
             return self.exercise_db[:4]  # Fallback to first 4 exercises
     
-    def _smart_exercise_selection(self, exercises, progress, user_data):
+    def _smart_exercise_selection(self, exercises: List[Dict[str, Any]], progress: List[Dict[str, Any]], user_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Select the best exercise from a list based on user progress and preferences"""
         try:
             if not exercises:
                 return None
             
             # Score exercises based on multiple factors
-            scored_exercises = []
+            scored_exercises: List[tuple[Dict[str, Any], float]] = []
             
             for exercise in exercises:
                 score = 0
@@ -642,13 +642,12 @@ class WorkoutGenerator:
             logger.error(f"Error in smart exercise selection: {e}")
             return exercises[0] if exercises else None
     
-    def _optimize_workout_parameters(self, exercises, user_data):
+    def _optimize_workout_parameters(self, exercises: List[Dict[str, Any]], user_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Optimize sets, reps, and rest periods for each exercise"""
         try:
-            optimized_workout = []
+            optimized_workout: List[Dict[str, Any]] = []
             
             fitness_level = user_data.get('fitness_level', 'beginner')
-            preferred_duration = user_data.get('preferred_duration', 30)
             
             # Base parameters by fitness level
             base_params = {
@@ -674,7 +673,7 @@ class WorkoutGenerator:
                 if exercise['difficulty_level'] > 7:
                     reps = max(6, reps - 2)
                 
-                optimized_exercise = {
+                optimized_exercise: Dict[str, Any] = {
                     **exercise,
                     'sets': sets,
                     'reps': reps,
@@ -690,9 +689,9 @@ class WorkoutGenerator:
             logger.error(f"Error optimizing workout parameters: {e}")
             return exercises
     
-    def _generate_exercise_notes(self, exercise, user_data):
+    def _generate_exercise_notes(self, exercise: Dict[str, Any], user_data: Dict[str, Any]) -> List[str]:
         """Generate personalized notes for each exercise"""
-        notes = []
+        notes: List[str] = []
         
         try:
             # Add beginner tips
@@ -716,7 +715,7 @@ class WorkoutGenerator:
         
         return notes
     
-    def _calculate_duration(self, workout):
+    def _calculate_duration(self, workout: List[Dict[str, Any]]) -> int:
         """Calculate estimated workout duration"""
         try:
             total_time = 0
@@ -737,7 +736,7 @@ class WorkoutGenerator:
             logger.error(f"Error calculating duration: {e}")
             return 30  # Default 30 minutes
     
-    def _assess_difficulty(self, workout, user_data):
+    def _assess_difficulty(self, workout: List[Dict[str, Any]], user_data: Dict[str, Any]) -> int:
         """Assess overall workout difficulty"""
         try:
             if not workout:
@@ -758,9 +757,9 @@ class WorkoutGenerator:
             logger.error(f"Error assessing difficulty: {e}")
             return 5
     
-    def _generate_adaptations(self, workout, user_data):
+    def _generate_adaptations(self, workout: List[Dict[str, Any]], user_data: Dict[str, Any]) -> List[str]:
         """Generate workout adaptations and modifications"""
-        adaptations = []
+        adaptations: List[str] = []
         
         try:
             fitness_level = user_data.get('fitness_level', 'beginner')
@@ -784,7 +783,7 @@ class WorkoutGenerator:
         
         return adaptations
     
-    def _generate_reasoning(self, workout, user_data, session_type):
+    def _generate_reasoning(self, workout: List[Dict[str, Any]], user_data: Dict[str, Any], session_type: str) -> str:
         """Generate explanation for workout selection"""
         try:
             goals = user_data.get('goals', [])
@@ -804,7 +803,7 @@ class WorkoutGenerator:
             logger.error(f"Error generating reasoning: {e}")
             return "Workout customized based on your profile and preferences."
     
-    def _get_fallback_workout(self):
+    def _get_fallback_workout(self) -> WorkoutRecommendation:
         """Return a safe fallback workout if generation fails"""
         return WorkoutRecommendation(
             exercises=[
@@ -838,30 +837,29 @@ pose_analyzer = PoseAnalyzer()
 workout_generator = WorkoutGenerator()
 
 # API Routes
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy', 'service': 'ai-service'})
+@app.route('/health', methods=['GET'])  # type: ignore
+def health() -> Any:
+    return jsonify({'status': 'healthy', 'service': 'ai-service'})  # type: ignore
 
-@app.route('/analyze/form', methods=['POST'])
-def analyze_form():
+@app.route('/analyze/form', methods=['POST'])  # type: ignore
+def analyze_form() -> Any:
     """Analyze exercise form from video frame"""
     try:
-        data = request.get_json()
+        data = request.get_json()  # type: ignore
         
         if not data or 'frame' not in data:
             return jsonify({'error': 'Video frame data required'}), 400
         
         # Decode base64 frame data
-        import base64
-        frame_data = base64.b64decode(data['frame'])
-        nparr = np.frombuffer(frame_data, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        frame_data = base64.b64decode(data['frame'])  # type: ignore
+        nparr = np.frombuffer(frame_data, np.uint8)  # type: ignore
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # type: ignore
         
-        exercise_type = data.get('exercise_type', 'push-ups')
-        user_id = request.headers.get('X-User-ID')
+        exercise_type = data.get('exercise_type', 'push-ups')  # type: ignore
+        user_id = request.headers.get('X-User-ID')  # type: ignore
         
         # Analyze form
-        result = pose_analyzer.analyze_exercise_form(frame, exercise_type, user_id)
+        result = pose_analyzer.analyze_exercise_form(frame, exercise_type, user_id)  # type: ignore
         
         # Store analysis result
         if user_id:
@@ -883,7 +881,7 @@ def analyze_form():
             except Exception as e:
                 logger.error(f"Error storing analysis result: {e}")
         
-        return jsonify({
+        return jsonify({  # type: ignore
             'form_score': result.form_score,
             'feedback': result.feedback,
             'corrections': result.corrections,
@@ -895,20 +893,20 @@ def analyze_form():
         logger.error(f"Form analysis error: {e}")
         return jsonify({'error': 'Analysis failed'}), 500
 
-@app.route('/generate/workout', methods=['POST'])
-def generate_workout():
+@app.route('/generate/workout', methods=['POST'])  # type: ignore
+def generate_workout() -> Any:
     """Generate personalized workout plan"""
     try:
-        data = request.get_json()
-        user_id = request.headers.get('X-User-ID')
+        data = request.get_json()  # type: ignore
+        user_id = request.headers.get('X-User-ID')  # type: ignore
         
         if not user_id:
             return jsonify({'error': 'User ID required'}), 400
         
-        session_type = data.get('session_type', 'full_body')
+        session_type = data.get('session_type', 'full_body')  # type: ignore
         
         # Generate workout
-        workout = workout_generator.generate_personalized_workout(user_id, session_type)
+        workout = workout_generator.generate_personalized_workout(user_id, session_type)  # type: ignore
         
         # Store generated workout
         try:
@@ -921,18 +919,19 @@ def generate_workout():
                     RETURNING id
                 """, (
                     user_id,
-                    f"AI Generated {session_type.title()} Workout",
+                    f"AI Generated {session_type.title()} Workout",  # type: ignore
                     json.dumps(workout.exercises),
                     session_type,
                     workout.estimated_duration,
                     workout.difficulty_level,
                     True
                 ))
-                workout_id = cursor.fetchone()['id']
+                result = cursor.fetchone()  # type: ignore
+                workout_id = result['id'] if result else None  # type: ignore
                 conn.commit()
                 
                 # Return workout with ID
-                return jsonify({
+                return jsonify({  # type: ignore
                     'workout_id': str(workout_id),
                     'exercises': workout.exercises,
                     'estimated_duration': workout.estimated_duration,
@@ -944,7 +943,7 @@ def generate_workout():
         except Exception as e:
             logger.error(f"Error storing workout: {e}")
             # Return workout without storing
-            return jsonify({
+            return jsonify({  # type: ignore
                 'exercises': workout.exercises,
                 'estimated_duration': workout.estimated_duration,
                 'difficulty_level': workout.difficulty_level,
@@ -956,29 +955,29 @@ def generate_workout():
         logger.error(f"Workout generation error: {e}")
         return jsonify({'error': 'Workout generation failed'}), 500
 
-@app.route('/analyze/progress', methods=['POST'])
-def analyze_progress():
+@app.route('/analyze/progress', methods=['POST'])  # type: ignore
+def analyze_progress() -> Any:
     """Analyze user progress and provide insights"""
     try:
-        user_id = request.headers.get('X-User-ID')
+        user_id = request.headers.get('X-User-ID')  # type: ignore
         
         if not user_id:
             return jsonify({'error': 'User ID required'}), 400
         
         # Get user progress data
-        progress_data = workout_generator._get_progress_metrics(user_id)
+        progress_data = workout_generator.get_progress_metrics(user_id)  # type: ignore
         
         if not progress_data:
-            return jsonify({
+            return jsonify({  # type: ignore
                 'insights': ['Not enough data for analysis. Complete more workouts to see insights.'],
                 'trends': {},
                 'recommendations': ['Keep working out consistently to track your progress!']
             })
         
         # Analyze trends
-        insights = []
-        trends = {}
-        recommendations = []
+        insights: List[str] = []
+        trends: Dict[str, Any] = {}
+        recommendations: List[str] = []
         
         # Workout frequency analysis
         recent_workouts = len([p for p in progress_data[:7] if p.get('total_workouts', 0) > 0])
@@ -996,7 +995,7 @@ def analyze_progress():
             old_strength = progress_data[6].get('metrics', {}).get('strength_metrics', {})
             
             if recent_strength and old_strength:
-                improvements = []
+                improvements: List[str] = []
                 for exercise, current in recent_strength.items():
                     old_value = old_strength.get(exercise, 0)
                     if current > old_value:
@@ -1017,7 +1016,7 @@ def analyze_progress():
             else:
                 recommendations.append("Try adding more cardio exercises to increase calorie burn.")
         
-        return jsonify({
+        return jsonify({  # type: ignore
             'insights': insights,
             'trends': trends,
             'recommendations': recommendations
@@ -1028,4 +1027,4 @@ def analyze_progress():
         return jsonify({'error': 'Progress analysis failed'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=os.getenv('FLASK_ENV') == 'development')
+    app.run(host='0.0.0.0', port=5000, debug=os.getenv('FLASK_ENV') == 'development')  # type: ignore

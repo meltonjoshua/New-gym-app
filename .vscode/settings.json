@@ -1,0 +1,16 @@
+{
+  "files.associations": {
+    "*.sql": "postgresql"
+  },
+  "sql.format.dialect": "postgresql",
+  "sql.connections": [
+    {
+      "name": "FitAI PostgreSQL",
+      "server": "localhost",
+      "database": "fitai_dev",
+      "authenticationType": "SqlLogin",
+      "user": "postgres",
+      "dialect": "postgresql"
+    }
+  ]
+}

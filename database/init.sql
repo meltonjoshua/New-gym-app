@@ -1,7 +1,7 @@
--- FitAI Pro Database Schema
+-- FitAI Pro Database Schema (PostgreSQL)
 -- Initialize the database with all required tables
 
--- Enable UUID extension
+-- Enable UUID extension (PostgreSQL specific)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Users table

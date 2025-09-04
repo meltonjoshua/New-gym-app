@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Grid,
@@ -7,14 +7,11 @@ import {
   Typography,
   Avatar,
   Chip,
-  LinearProgress,
   Button,
-  Paper,
   List,
   ListItem,
   ListItemText,
   ListItemAvatar,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -39,7 +36,6 @@ import {
   Error,
 } from '@mui/icons-material';
 import {
-  LineChart,
   Line,
   AreaChart,
   Area,

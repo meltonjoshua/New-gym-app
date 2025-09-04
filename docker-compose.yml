@@ -121,7 +121,7 @@ services:
   web-frontend:
     build: ./frontend/web
     ports:
-      - "3001:80"
+      - "3005:80"
     environment:
       - REACT_APP_API_URL=http://localhost:3000
     depends_on:
